@@ -1,0 +1,28 @@
+# Node.js dependencies
+node_modules/
+
+# Env files with secrets
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor folders
+.vscode/
+.idea/
+
+# Build output (si tu en as)
+dist/
+build/
+
+# Frontend cache (si pertinent)
+.cache/
+
