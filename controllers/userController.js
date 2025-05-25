@@ -1,119 +1,71 @@
-// controllers/userController.js
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-// Récupérer profil utilisateur par ID ou username
-exports.getUserProfile = async (req, res) => {
+exports.register = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { username, email, password } = req.body;
 
-    const user = await User.findOne({ username }).select('-password -resetPasswordToken -resetPasswordExpires');
-    if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Utilisateur déjà existant.' });
+    }
 
-    res.json(user);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ username, email, password: hashedPassword });
+    await newUser.save();
+
+    res.status(201).json({ message: 'Utilisateur créé avec succès.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur.', error: err });
   }
 };
 
-// Modifier profil : photo, email, mot de passe
-exports.updateProfile = async (req, res) => {
+exports.login = async (req, res) => {
   try {
-    const userId = req.user.id; // À récupérer via middleware d'authentification JWT
-    const { email, currentPassword, newPassword, username } = req.body;
-    const updateData = {};
+    const { identifier, password } = req.body;
 
-    // Vérifier et mettre à jour l'email si besoin
-    if (email) {
-      const emailExists = await User.findOne({ email });
-      if (emailExists && emailExists._id.toString() !== userId) {
-        return res.status(400).json({ message: 'Correo ya en uso.' });
-      }
-      updateData.email = email;
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur introuvable.' });
     }
 
-    // Modifier le nom d'utilisateur
-    if (username) {
-      const userExists = await User.findOne({ username });
-      if (userExists && userExists._id.toString() !== userId) {
-        return res.status(400).json({ message: 'Nombre de usuario ya usado.' });
-      }
-      updateData.username = username;
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Mot de passe incorrect.' });
     }
 
-    // Modifier mot de passe
-    if (currentPassword && newPassword) {
-      const user = await User.findById(userId);
-      const match = await bcrypt.compare(currentPassword, user.password);
-      if (!match) return res.status(400).json({ message: 'Contraseña actual incorrecta.' });
-
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(newPassword, salt);
-    }
-
-    // TODO: gérer photo de profil (upload + url)
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true }).select('-password');
-
-    res.json({ message: 'Perfil actualizado.', user: updatedUser });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.status(200).json({ message: 'Connexion réussie.', token, user });
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur.', error: err });
   }
 };
 
-// Suivre un utilisateur
-exports.followUser = async (req, res) => {
+exports.updateUser = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { followId } = req.body;
-
-    if (userId === followId) {
-      return res.status(400).json({ message: 'No puedes seguirte a ti mismo.' });
+    const updates = req.body;
+    if (updates.password) {
+      updates.password = await bcrypt.hash(updates.password, 10);
     }
 
-    const user = await User.findById(userId);
-    const userToFollow = await User.findById(followId);
-    if (!userToFollow) return res.status(404).json({ message: 'Usuario a seguir no encontrado.' });
-
-    if (user.following.includes(followId)) {
-      return res.status(400).json({ message: 'Ya sigues a este usuario.' });
-    }
-
-    user.following.push(followId);
-    userToFollow.followers.push(userId);
-
-    await user.save();
-    await userToFollow.save();
-
-    res.json({ message: `Ahora sigues a ${userToFollow.username}.` });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, { new: true });
+    res.status(200).json(updatedUser);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur.', error: err });
   }
 };
 
-// Ne plus suivre un utilisateur
-exports.unfollowUser = async (req, res) => {
+exports.getUser = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { unfollowId } = req.body;
-
-    const user = await User.findById(userId);
-    const userToUnfollow = await User.findById(unfollowId);
-    if (!userToUnfollow) return res.status(404).json({ message: 'Usuario no encontrado.' });
-
-    user.following = user.following.filter(id => id.toString() !== unfollowId);
-    userToUnfollow.followers = userToUnfollow.followers.filter(id => id.toString() !== userId);
-
-    await user.save();
-    await userToUnfollow.save();
-
-    res.json({ message: `Has dejado de seguir a ${userToUnfollow.username}.` });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Utilisateur introuvable.' });
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Erreur serveur.', error: err });
   }
 };
 
