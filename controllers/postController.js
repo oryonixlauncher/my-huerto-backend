@@ -1,129 +1,111 @@
-// controllers/postController.js
 const Post = require('../models/Post');
 const User = require('../models/User');
 
-// Créer une publication (texte + images/vidéos uploadées)
+// Créer un post
 exports.createPost = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { text, mediaUrls } = req.body; // mediaUrls : tableau de liens images/vidéos
-
-    if (!text && (!mediaUrls || mediaUrls.length === 0)) {
-      return res.status(400).json({ message: 'El post debe tener texto o media.' });
-    }
-
+    const { userId, content, imageUrl, videoUrl } = req.body;
     const newPost = new Post({
-      author: userId,
-      text,
-      media: mediaUrls,
-      createdAt: Date.now(),
+      user: userId,
+      content,
+      imageUrl,
+      videoUrl,
+      likes: [],
+      comments: [],
     });
-
-    await newPost.save();
-    res.status(201).json({ message: 'Publicación creada.', post: newPost });
+    const savedPost = await newPost.save();
+    res.status(201).json(savedPost);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    res.status(500).json({ error: 'Erreur lors de la création du post.' });
   }
 };
 
-// Récupérer posts (feed, user, etc.)
-exports.getPosts = async (req, res) => {
+// Obtenir tous les posts
+exports.getAllPosts = async (req, res) => {
   try {
-    const { username, limit = 20, skip = 0 } = req.query;
-    let query = {};
-
-    if (username) {
-      const user = await User.findOne({ username });
-      if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
-      query.author = user._id;
-    }
-
-    const posts = await Post.find(query)
-      .sort({ createdAt: -1 })
-      .skip(parseInt(skip))
-      .limit(parseInt(limit))
-      .populate('author', 'username photoUrl');
-
-    res.json(posts);
+    const posts = await Post.find().populate('user', 'username photo').sort({ createdAt: -1 });
+    res.status(200).json(posts);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    res.status(500).json({ error: 'Erreur lors du chargement des posts.' });
   }
 };
 
-// Liker ou unliker une publication
+// Obtenir un post par ID
+exports.getPostById = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id).populate('user', 'username photo');
+    if (!post) return res.status(404).json({ error: 'Post introuvable.' });
+    res.status(200).json(post);
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de la récupération du post.' });
+  }
+};
+
+// Modifier un post
+exports.updatePost = async (req, res) => {
+  try {
+    const { content, imageUrl, videoUrl } = req.body;
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post non trouvé.' });
+
+    post.content = content || post.content;
+    post.imageUrl = imageUrl || post.imageUrl;
+    post.videoUrl = videoUrl || post.videoUrl;
+
+    const updatedPost = await post.save();
+    res.status(200).json(updatedPost);
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de la mise à jour.' });
+  }
+};
+
+// Supprimer un post
+exports.deletePost = async (req, res) => {
+  try {
+    const deletedPost = await Post.findByIdAndDelete(req.params.id);
+    if (!deletedPost) return res.status(404).json({ error: 'Post non trouvé.' });
+    res.status(200).json({ message: 'Post supprimé avec succès.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de la suppression.' });
+  }
+};
+
+// Liker / Unliker un post
 exports.toggleLike = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { postId } = req.body;
+    const post = await Post.findById(req.params.id);
+    const userId = req.body.userId;
 
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Publicación no encontrada.' });
-
-    const index = post.likes.findIndex(id => id.toString() === userId);
-    if (index === -1) {
+    if (!post.likes.includes(userId)) {
       post.likes.push(userId);
     } else {
-      post.likes.splice(index, 1);
+      post.likes = post.likes.filter(id => id !== userId);
     }
 
-    await post.save();
-    res.json({ message: 'Like actualizado.', likesCount: post.likes.length });
+    const updatedPost = await post.save();
+    res.status(200).json(updatedPost);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    res.status(500).json({ error: 'Erreur lors du like/unlike.' });
   }
 };
 
 // Ajouter un commentaire
 exports.addComment = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { postId, text } = req.body;
+    const post = await Post.findById(req.params.id);
+    const { userId, text } = req.body;
 
-    if (!text) return res.status(400).json({ message: 'Comentario vacío.' });
-
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Publicación no encontrada.' });
-
-    post.comments.push({
-      author: userId,
+    const comment = {
+      user: userId,
       text,
-      createdAt: Date.now(),
-      reactions: [], // emojis etc.
-    });
+      createdAt: new Date(),
+    };
 
-    await post.save();
-
-    res.json({ message: 'Comentario agregado.', commentsCount: post.comments.length });
+    post.comments.push(comment);
+    const updatedPost = await post.save();
+    res.status(200).json(updatedPost);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
-  }
-};
-
-// Modifier une publication (texte ou médias)
-exports.editPost = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { postId, newText, newMediaUrls } = req.body;
-
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ message: 'Publicación no encontrada.' });
-
-    if (post.author.toString() !== userId) {
-      return res.status(403).json({ message: 'No tienes permiso para editar esta publicación.' });
-    }
-
-    if (newText !== undefined) post.text = newText;
-    if (newMediaUrls !== undefined) post.media = newMediaUrls;
-
-    await post.save();
-    res.json({ message: 'Publicación actualizada.', post });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error del servidor.' });
+    res.status(500).json({ error: 'Erreur lors de l’ajout du commentaire.' });
   }
 };
 

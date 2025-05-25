@@ -1,18 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const postController = require('../controllers/postController');
-const { isAuthenticated } = require('../middleware/authMiddleware');
 
-// CRUD posts
-router.post('/', isAuthenticated, postController.createPost);
-router.get('/', isAuthenticated, postController.getFeed);
-router.get('/:postId', isAuthenticated, postController.getPost);
-router.put('/:postId', isAuthenticated, postController.updatePost);
-router.delete('/:postId', isAuthenticated, postController.deletePost);
+// Routes principales des posts
+router.post('/', postController.createPost);
+router.get('/', postController.getAllPosts);
+router.get('/:id', postController.getPostById);
+router.put('/:id', postController.updatePost);
+router.delete('/:id', postController.deletePost);
 
 // Likes
-router.post('/:postId/like', isAuthenticated, postController.likePost);
-router.post('/:postId/unlike', isAuthenticated, postController.unlikePost);
+router.post('/:id/like', postController.toggleLike);
+
+// Commentaires
+router.post('/:id/comments', postController.addComment);
 
 module.exports = router;
 
