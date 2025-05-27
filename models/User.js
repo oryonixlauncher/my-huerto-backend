@@ -1,1 +1,1 @@
-// TODO: Define mongoose schema for User.js
+// User.js - à compléter

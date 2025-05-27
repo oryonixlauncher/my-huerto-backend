@@ -1,1 +1,1 @@
-// TODO: Implement authController.js
+// authController.js - à compléter

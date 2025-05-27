@@ -1,1 +1,1 @@
-// TODO: Implement followController.js
+// followController.js - à compléter

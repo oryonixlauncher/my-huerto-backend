@@ -1,1 +1,1 @@
-// TODO: Define mongoose schema for Post.js
+// Post.js - à compléter

@@ -1,1 +1,1 @@
-// TODO: Implement likeController.js
+// likeController.js - à compléter

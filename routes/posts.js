@@ -1,1 +1,1 @@
-// TODO: Implement posts.js
+// posts.js - à compléter

@@ -1,1 +1,1 @@
-// TODO: Implement likes.js
+// likes.js - à compléter
